@@ -206,6 +206,10 @@ python -c "import jmcomic; print(jmcomic.__version__)"
 
 建议在测试机器人或私聊中验证 `/jm 下载`，避免在公开群聊中直接发送成人内容。
 
+## 更新日志
+
+见 [CHANGELOG.md](./CHANGELOG.md)。
+
 ## 许可与致谢
 
 - 本插件代码：MIT License，见 [LICENSE](./LICENSE)。

@@ -2,7 +2,7 @@ name: astrbot_plugin_jmcomic
 display_name: 禁漫漫画助手
 short_desc: 用 /jm 查漫画详情、下载整本并转 PDF、随机推荐一部。
 desc: 基于 jmcomic 库的 JM 漫画助手，支持 /jm <ID> 查看封面/作者/简介、/jm 下载 <ID> 下载整本并合并 PDF、/jm 推荐 随机推荐。
-version: v1.0.0
+version: v1.0.1
 author: javios
 astrbot_version: ">=4.10,<5"
 support_platforms:
