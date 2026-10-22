@@ -9,3 +9,4 @@ support_platforms:
   - aiocqhttp
   - telegram
   - lark
+repo: https://github.com/qzf21/astrbot_plugin_jmcomic
