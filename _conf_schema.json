@@ -1,0 +1,199 @@
+{
+  "max_concurrent_downloads": {
+    "description": "同时进行的下载任务数",
+    "type": "int",
+    "default": 2,
+    "slider": {"min": 1, "max": 5, "step": 1},
+    "hint": "多个用户同时 /jm 下载时最多并行几个任务，过高可能占用大量带宽和磁盘。"
+  },
+  "download_timeout": {
+    "description": "单个本子下载超时（秒）",
+    "type": "int",
+    "default": 600,
+    "slider": {"min": 60, "max": 1800, "step": 30},
+    "hint": "超过该时间会取消下载。网络较慢或本子很大时可以调高。"
+  },
+  "pdf_timeout": {
+    "description": "PDF 生成超时（秒）",
+    "type": "int",
+    "default": 300,
+    "slider": {"min": 30, "max": 1200, "step": 30},
+    "hint": "图片转 PDF 的最长耗时，超时后图片会保留，可重试。"
+  },
+  "image_concurrency": {
+    "description": "图片下载并发数",
+    "type": "int",
+    "default": 8,
+    "slider": {"min": 1, "max": 20, "step": 1},
+    "hint": "单个本子内同时下载几张图。过高容易触发站点限流。"
+  },
+  "proxy": {
+    "description": "HTTP 代理",
+    "type": "string",
+    "default": "",
+    "hint": "例如 http://127.0.0.1:7890；留空表示不使用代理。"
+  },
+  "domain_list": {
+    "description": "JM 域名列表",
+    "type": "list",
+    "default": [],
+    "hint": "留空会自动从域名服务器获取。可填写如 18comic.vip，多个域名按顺序尝试。"
+  },
+  "max_album_pages": {
+    "description": "单本页数上限",
+    "type": "int",
+    "default": 1000,
+    "slider": {"min": 0, "max": 5000, "step": 50},
+    "hint": "超过该页数拒绝下载，0 表示不限制。防止超大本子占满磁盘/内存。"
+  },
+  "pdf_pages_per_file": {
+    "description": "每个 PDF 的页数",
+    "type": "int",
+    "default": 0,
+    "slider": {"min": 0, "max": 500, "step": 10},
+    "hint": "0 表示所有章节合并成一个 PDF；大于 0 时按页数分卷发送。"
+  },
+  "pdf_split_size_mb": {
+    "description": "PDF 分卷大小（MB）",
+    "type": "int",
+    "default": 0,
+    "slider": {"min": 0, "max": 200, "step": 5},
+    "hint": "0 表示不按大小分卷。NapCat/QQ 群文件通常限制 100MB，建议填 90。"
+  },
+  "pdf_jpeg_quality": {
+    "description": "PDF 内图片 JPEG 质量",
+    "type": "int",
+    "default": 90,
+    "slider": {"min": 60, "max": 100, "step": 1},
+    "hint": "质量越高越清晰、体积越大。WebP 原图会转成 JPEG 以显著减小 PDF。"
+  },
+  "cleanup_images": {
+    "description": "生成 PDF 后删除原始图片",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后会保留下载的图片，方便排查问题，但会占用更多磁盘。"
+  },
+  "cache_pdf": {
+    "description": "缓存已生成的 PDF",
+    "type": "bool",
+    "default": true,
+    "hint": "同一个本子再次请求时直接发送缓存文件。"
+  },
+  "cache_days": {
+    "description": "缓存保留天数",
+    "type": "int",
+    "default": 7,
+    "slider": {"min": 0, "max": 90, "step": 1},
+    "hint": "插件启动时清理超过该天数的 PDF、封面和残留下载文件；0 表示不清理。"
+  },
+  "cover_enabled": {
+    "description": "发送漫画封面",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后 /jm <ID> 只返回文字信息。"
+  },
+  "title_max_len": {
+    "description": "标题最大长度",
+    "type": "int",
+    "default": 120,
+    "slider": {"min": 20, "max": 500, "step": 10},
+    "hint": "过长的标题会被截断，避免消息太长。"
+  },
+  "description_max_len": {
+    "description": "简介最大长度",
+    "type": "int",
+    "default": 300,
+    "slider": {"min": 0, "max": 2000, "step": 50},
+    "hint": "0 表示不截断；部分本子简介很长，建议保持 300 左右。"
+  },
+  "nsfw_warning": {
+    "description": "附加成人内容提示",
+    "type": "bool",
+    "default": true,
+    "hint": "在详情和下载结果后追加“18+”提示。"
+  },
+  "group_enabled": {
+    "description": "允许在群聊使用",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后只允许私聊使用。"
+  },
+  "download_admin_only": {
+    "description": "仅管理员可下载",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后普通用户只能查详情和推荐，不能 /jm 下载。"
+  },
+  "allowed_groups": {
+    "description": "允许使用的群号",
+    "type": "list",
+    "default": [],
+    "hint": "留空表示不限制；填写后只有列表内的群可以使用。"
+  },
+  "blocked_groups": {
+    "description": "禁止使用的群号",
+    "type": "list",
+    "default": [],
+    "hint": "黑名单优先级高于白名单。"
+  },
+  "blocked_tags": {
+    "description": "屏蔽标签",
+    "type": "list",
+    "default": ["loli", "萝莉", "幼女", "shota", "正太", "lolicon", "shotacon"],
+    "hint": "命中标题或标签时拒绝处理；清空列表可关闭该过滤。"
+  },
+  "enforce_blocked_tags": {
+    "description": "启用屏蔽标签过滤",
+    "type": "bool",
+    "default": true,
+    "hint": "对详情、下载和推荐都生效。"
+  },
+  "download_cooldown": {
+    "description": "下载冷却（秒）",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 0, "max": 600, "step": 10},
+    "hint": "同一用户两次下载之间的最小间隔，0 表示不限制；管理员不受限制。"
+  },
+  "debug_log": {
+    "description": "输出 jmcomic 调试日志",
+    "type": "bool",
+    "default": false,
+    "hint": "排查下载/域名问题时开启，正常使用建议关闭。"
+  },
+  "retry_times": {
+    "description": "网络重试次数",
+    "type": "int",
+    "default": 3,
+    "slider": {"min": 0, "max": 10, "step": 1},
+    "hint": "jmcomic 请求失败后的重试次数。"
+  },
+  "http_timeout": {
+    "description": "单次 HTTP 请求超时（秒）",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 5, "max": 120, "step": 5},
+    "hint": "jmcomic 客户端单次请求的超时时间。"
+  },
+  "detail_timeout": {
+    "description": "查询详情超时（秒）",
+    "type": "int",
+    "default": 45,
+    "slider": {"min": 10, "max": 180, "step": 5},
+    "hint": "获取本子详情和封面的最长等待时间。"
+  },
+  "max_random_page": {
+    "description": "随机推荐的最大页码",
+    "type": "int",
+    "default": 20,
+    "slider": {"min": 1, "max": 200, "step": 1},
+    "hint": "从“最新”分类的前 N 页中随机抽取，页码越大越可能抽到旧本子。"
+  },
+  "recommend_attempts": {
+    "description": "推荐重试次数",
+    "type": "int",
+    "default": 8,
+    "slider": {"min": 1, "max": 20, "step": 1},
+    "hint": "抽到屏蔽标签或请求失败时最多重试几次。"
+  }
+}
