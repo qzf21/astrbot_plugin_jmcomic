@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.0
+
+- 新增 `/jm <关键词...>` 关键词随机推荐，空格分隔多个关键词。
+- 默认要求所有关键词都命中标题/标签/作者；支持 `-关键词` 排除。
+- 新增 `keyword_search_pages`、`keyword_search_attempts`、`keyword_match_all` 配置。
+- 更新帮助文本、README 和示例。
+
 ## v1.0.1
 
 - 更换插件图标为新的 256×256 Logo。

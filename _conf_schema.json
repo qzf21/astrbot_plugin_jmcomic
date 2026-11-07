@@ -195,5 +195,25 @@
     "default": 8,
     "slider": {"min": 1, "max": 20, "step": 1},
     "hint": "抽到屏蔽标签或请求失败时最多重试几次。"
+  },
+  "keyword_search_pages": {
+    "description": "关键词搜索页数",
+    "type": "int",
+    "default": 3,
+    "slider": {"min": 1, "max": 10, "step": 1},
+    "hint": "从搜索结果的前 N 页收集候选；页数越多候选越多，耗时也越长。"
+  },
+  "keyword_search_attempts": {
+    "description": "关键词匹配尝试次数",
+    "type": "int",
+    "default": 12,
+    "slider": {"min": 1, "max": 30, "step": 1},
+    "hint": "随机抽取候选并检查标题/标签，最多检查几部；太小可能抽不到同时命中的本子。"
+  },
+  "keyword_match_all": {
+    "description": "关键词必须全部命中",
+    "type": "bool",
+    "default": true,
+    "hint": "开启时要求标题/标签/作者包含所有关键词；关闭时命中任意一个即可。"
   }
 }

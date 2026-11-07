@@ -1,6 +1,6 @@
 # astrbot_plugin_jmcomic
 
-基于 [`jmcomic`](https://github.com/hect0x7/JMComic-Crawler-Python) 库的 AstrBot 插件：查询 JM 漫画信息、下载整本并合并为 PDF、随机推荐。
+基于 [`jmcomic`](https://github.com/hect0x7/JMComic-Crawler-Python) 库的 AstrBot 插件：查询 JM 漫画信息、按关键词推荐、下载整本并合并为 PDF。
 
 > [!WARNING]
 > 本插件会访问成人向漫画站点，仅限 18 岁以上用户在遵守当地法律法规的前提下自行部署使用。请勿在未成年人可访问的群聊或公开场景中传播相关内容。
@@ -10,19 +10,32 @@
 | 指令 | 说明 |
 | --- | --- |
 | `/jm <JM号>` | 返回 JM 号、标题、封面、作者、标签、页数、简介 |
+| `/jm <关键词...>` | 按关键词随机推荐，空格分隔多个关键词，默认全部命中标题/标签/作者 |
 | `/jm 下载 <JM号>` | 下载整本，按章节顺序合并成一个 PDF 并发送文件 |
 | `/jm 推荐` | 从“最新”分类中随机推荐一部，返回格式与第一条一致 |
 | `/jm 帮助` | 显示帮助 |
 
-也支持 `JM123456`、`jm-123456`、`/album/123456` 等写法；指令别名：`jmcomic`、`禁漫`。
+也支持 `JM123456`、`jm-123456`、`/album/123456` 等写法；指令别名：`jmcomic`、`JM`、`禁漫`。
 
 示例：
 
 ```text
 /jm 123456
+/jm 全彩 中文
+/jm 推荐 全彩 中文
 /jm 下载 123456
 /jm 推荐
 ```
+
+### 关键词推荐规则
+
+- 多个关键词用空格分隔，例如 `/jm 全彩 中文`。
+- 默认要求标题、标签或作者中**同时包含所有关键词**。
+- `-` 开头的词表示排除，例如 `/jm -NTR 中文`。
+- `/jm 推荐 全彩 中文` 与 `/jm 全彩 中文` 等价。
+- 插件会从搜索结果前几页收集候选，随机取候选查详情并按关键词过滤，避免只按站点排序返回。
+
+关键词相关配置：`keyword_search_pages`、`keyword_search_attempts`、`keyword_match_all`。
 
 ## 安装
 
@@ -66,7 +79,8 @@ pip install -r data/plugins/astrbot_plugin_jmcomic/requirements.txt
    - 按章节、页码顺序读取图片，统一转成 JPEG（WebP 原图会让 PDF 膨胀 4～5 倍），再用 `img2pdf` 合并；
    - 通过 `Comp.File` 发送 PDF，默认生成后删除原始图片；
    - 相同本子再次请求时优先发送缓存 PDF。
-3. `/jm 推荐`：读取“最新”分类的前 N 页，随机抽一个 JM 号，再按第 1 条格式返回；命中屏蔽标签会重新抽取。
+3. `/jm <关键词...>`：用 `search_site` 搜索，收集前 N 页候选，随机取候选查详情，按关键词过滤标题/标签/作者，命中后按第 1 条格式返回；支持 `-关键词` 排除。
+4. `/jm 推荐`：读取“最新”分类的前 N 页，随机抽一个 JM 号，再按第 1 条格式返回；命中屏蔽标签会重新抽取。
 
 ## 配置
 
@@ -104,6 +118,9 @@ pip install -r data/plugins/astrbot_plugin_jmcomic/requirements.txt
 | `detail_timeout` | `45` | 查询详情超时 |
 | `max_random_page` | `20` | 随机推荐的最大页码 |
 | `recommend_attempts` | `8` | 推荐重试次数 |
+| `keyword_search_pages` | `3` | 关键词搜索收集前几页候选 |
+| `keyword_search_attempts` | `12` | 关键词匹配最多检查几部 |
+| `keyword_match_all` | `true` | 是否要求所有关键词都命中 |
 
 ### 关于群文件发送（OneBot v11 / NapCat）
 

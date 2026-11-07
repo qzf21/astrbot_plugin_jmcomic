@@ -67,6 +67,7 @@ class JMDownloadError(JMServiceError):
 class AlbumView:
     album: JmAlbumDetail
     cover: Path | None = None
+    keyword_text: str = ""
 
 
 @dataclass(slots=True)
@@ -121,6 +122,9 @@ class JMService:
         self.cache_days = self._int("cache_days", 7, 0, 3650)
         self.max_random_page = self._int("max_random_page", 20, 1, 500)
         self.recommend_attempts = self._int("recommend_attempts", 8, 1, 30)
+        self.keyword_search_pages = self._int("keyword_search_pages", 3, 1, 10)
+        self.keyword_search_attempts = self._int("keyword_search_attempts", 12, 1, 30)
+        self.keyword_match_all = self._bool("keyword_match_all", True)
 
         self.cleanup_images = self._bool("cleanup_images", True)
         self.cache_pdf = self._bool("cache_pdf", True)
@@ -135,6 +139,7 @@ class JMService:
         self._download_sem = asyncio.Semaphore(self.max_concurrent)
         self._album_locks: dict[str, asyncio.Lock] = {}
         self._page_cache: dict[int, _PageCacheItem] = {}
+        self._search_cache: dict[str, tuple[float, list[str]]] = {}
         self._closed = False
 
     # ------------------------------------------------------------------
@@ -413,6 +418,176 @@ class JMService:
             raise JMNetworkError(f"获取推荐失败：{exc}") from exc
 
         raise JMServiceError("暂时没有找到合适的推荐，请稍后再试")
+
+    # ------------------------------------------------------------------
+    # 关键词推荐
+    # ------------------------------------------------------------------
+    async def recommend_by_keywords(self, keywords: Sequence[str]) -> AlbumView:
+        """按关键词搜索并随机推荐一部。
+
+        多个关键词默认要求全部命中标题/标签/作者；支持 ``-词`` 排除。
+        """
+        terms = [str(item).strip() for item in keywords if str(item).strip()]
+        if not terms:
+            raise JMServiceError("请至少提供一个关键词")
+        terms = terms[:8]
+        query = " ".join(terms)
+        if len(query) > 100:
+            raise JMServiceError("关键词太长，请缩短后再试")
+
+        include_terms, exclude_terms = self._split_keyword_terms(terms)
+        if not include_terms and not exclude_terms:
+            raise JMServiceError("关键词无效，请换一个说法")
+
+        option = self._build_option()
+        try:
+            async with option.new_jm_async_client() as client:
+                ids = await self._search_album_ids(client, query)
+                if not ids:
+                    raise JMServiceError(f"没有找到包含「{query}」的漫画")
+
+                # 搜索结果越靠前通常越相关：随机选一个起点顺序检查，
+                # 既保留随机性，又避免一上来就抽到完全不相关的候选。
+                if len(ids) > 1:
+                    window = min(
+                        len(ids),
+                        max(20, self.keyword_search_attempts * 2),
+                    )
+                    start = random.randrange(window)
+                    ids = ids[start:] + ids[:start]
+
+                checked = 0
+                batch_size = 8
+                while checked < self.keyword_search_attempts and checked < len(ids):
+                    batch = ids[checked : checked + batch_size]
+                    checked += len(batch)
+
+                    # 并发查详情，避免逐个串行时最坏要等十几秒
+                    albums = await asyncio.gather(
+                        *(
+                            asyncio.wait_for(
+                                client.get_album_detail(str(album_id)),
+                                timeout=self.detail_timeout,
+                            )
+                            for album_id in batch
+                        ),
+                        return_exceptions=True,
+                    )
+
+                    for album_id, album in zip(batch, albums, strict=False):
+                        if isinstance(album, BaseException):
+                            logger.debug(
+                                "关键词候选 JM%s 获取失败：%s", album_id, album
+                            )
+                            continue
+
+                        if self.enforce_blocked_tags and find_blocked_tag(
+                            album, self.blocked_tags
+                        ):
+                            logger.info("关键词候选 JM%s 命中屏蔽标签，跳过", album_id)
+                            continue
+
+                        if not self._album_matches_keywords(
+                            album,
+                            include_terms,
+                            exclude_terms,
+                        ):
+                            continue
+
+                        cover = (
+                            await self._download_cover(client, album.album_id)
+                            if self.cover_enabled
+                            else None
+                        )
+                        return AlbumView(
+                            album=album,
+                            cover=cover,
+                            keyword_text=query,
+                        )
+        except JMServiceError:
+            raise
+        except (asyncio.TimeoutError, TimeoutError) as exc:  # noqa: UP041 - 兼容 Python 3.10
+            raise JMTimeoutError("关键词搜索超时，请稍后再试") from exc
+        except JmcomicException as exc:
+            raise JMNetworkError(f"关键词搜索失败：{exc}") from exc
+        except Exception as exc:
+            logger.exception("关键词搜索失败")
+            raise JMNetworkError(f"关键词搜索失败：{exc}") from exc
+
+        raise JMServiceError(
+            f"没有找到同时包含「{query}」的漫画，试试减少关键词或换一个说法"
+        )
+
+    async def _search_album_ids(self, client: Any, query: str) -> list[str]:
+        cache_key = f"{query}|{self.keyword_search_pages}"
+        now = time.monotonic()
+        cached = self._search_cache.get(cache_key)
+        if cached is not None and now - cached[0] < 300:
+            return list(cached[1])
+
+        first = await asyncio.wait_for(
+            client.search_site(query, 1),
+            timeout=self.detail_timeout,
+        )
+        ids = [str(item) for item in first.iter_id()]
+        page_count = max(1, int(getattr(first, "page_count", 1) or 1))
+        last_page = min(page_count, self.keyword_search_pages)
+
+        pages = list(range(2, last_page + 1))
+        if pages:
+            results = await asyncio.gather(
+                *(client.search_site(query, page) for page in pages),
+                return_exceptions=True,
+            )
+            for page, data in zip(pages, results, strict=False):
+                if isinstance(data, BaseException):
+                    logger.debug("关键词搜索第 %s 页失败：%s", page, data)
+                    continue
+                page_ids = [str(item) for item in data.iter_id()]
+                ids.extend(page_ids)
+
+        deduped = list(dict.fromkeys(ids))
+        if len(self._search_cache) > 100:
+            self._search_cache.clear()
+        self._search_cache[cache_key] = (now, deduped)
+        logger.info("关键词「%s」搜索到 %s 个候选", query, len(deduped))
+        return deduped
+
+    @staticmethod
+    def _split_keyword_terms(terms: Sequence[str]) -> tuple[list[str], list[str]]:
+        include_terms: list[str] = []
+        exclude_terms: list[str] = []
+        for raw in terms:
+            term = str(raw).strip()
+            if not term:
+                continue
+            if term.startswith("-") and len(term) > 1:
+                exclude_terms.append(term[1:])
+            elif term.startswith("+") and len(term) > 1:
+                include_terms.append(term[1:])
+            else:
+                include_terms.append(term)
+        return include_terms, exclude_terms
+
+    def _album_matches_keywords(
+        self,
+        album: JmAlbumDetail,
+        include_terms: Sequence[str],
+        exclude_terms: Sequence[str],
+    ) -> bool:
+        fields: list[str] = [str(getattr(album, "name", "") or "")]
+        for attr in ("tags", "authors", "works", "actors"):
+            values = getattr(album, attr, None) or []
+            fields.extend(str(item) for item in values)
+
+        haystack = " ".join(fields).casefold()
+        if exclude_terms and any(term.casefold() in haystack for term in exclude_terms):
+            return False
+        if not include_terms:
+            return True
+        if self.keyword_match_all:
+            return all(term.casefold() in haystack for term in include_terms)
+        return any(term.casefold() in haystack for term in include_terms)
 
     async def _random_album_ids(self, client: Any) -> list[str]:
         first = await self._category_page(client, 1)

@@ -1,10 +1,11 @@
 """AstrBot 禁漫漫画插件。
 
 指令：
-    /jm <ID>        查看漫画封面、作者、简介
-    /jm 下载 <ID>   下载整本并合并成 PDF 发送
-    /jm 推荐        从最新分类里随机推荐一部
-    /jm 帮助        查看帮助
+    /jm <ID>          查看漫画封面、作者、简介
+    /jm <关键词...>   按关键词随机推荐，空格分隔多个关键词
+    /jm 下载 <ID>     下载整本并合并成 PDF 发送
+    /jm 推荐          从最新分类里随机推荐一部
+    /jm 帮助          查看帮助
 """
 
 from __future__ import annotations
@@ -36,13 +37,16 @@ PLUGIN_NAME = "astrbot_plugin_jmcomic"
 
 HELP_TEXT = """📖 JM 漫画助手
 
-/jm <ID>        查看漫画详情（封面 / 作者 / 简介）
-/jm 下载 <ID>   下载整本并合并成一个 PDF 发送
-/jm 推荐        随机推荐一部漫画
-/jm 帮助        显示本帮助
+/jm <ID>          查看漫画详情（封面 / 作者 / 简介）
+/jm <关键词...>   按关键词随机推荐，空格分隔多个关键词
+/jm 下载 <ID>     下载整本并合并成一个 PDF 发送
+/jm 推荐          随机推荐一部漫画
+/jm 帮助          显示本帮助
 
 示例：
 /jm 123456
+/jm 全彩 中文
+/jm 推荐 全彩 中文
 /jm 下载 123456
 /jm 推荐"""
 
@@ -79,7 +83,7 @@ class JMComicPlugin(Star):
     # ------------------------------------------------------------------
     @filter.command("jm", alias={"jmcomic", "JM", "禁漫"})
     async def jm(self, event: AstrMessageEvent):
-        """JM 漫画：/jm <ID> 查详情，/jm 下载 <ID> 发 PDF，/jm 推荐 随机推荐。"""
+        """JM 漫画：/jm <ID> 查详情，/jm 关键词... 搜索推荐，/jm 下载 <ID> 发 PDF。"""
         denied = self._access_denied(event)
         if denied:
             yield event.plain_result(denied)
@@ -99,20 +103,49 @@ class JMComicPlugin(Star):
                 yield event.plain_result(self._error_text(exc))
             return
 
-        album_id = extract_jm_id(payload)
-        if not album_id:
-            yield event.plain_result(
-                "❌ 没有识别到 JM 号。\n用法：/jm <ID> 或 /jm 下载 <ID>\n" + HELP_TEXT
-            )
+        if action == "keyword":
+            keywords = payload.split()[:8]
+            if not keywords:
+                yield event.plain_result(
+                    "❌ 请提供至少一个关键词。\n例如：/jm 全彩 中文\n" + HELP_TEXT
+                )
+                return
+            try:
+                preview = " ".join(keywords)[:80]
+                yield event.plain_result(f"🔎 正在搜索：{preview} …")
+                yield await self._keyword_result(event, keywords)
+            except Exception as exc:  # noqa: BLE001 - 统一转成用户可读错误
+                yield event.plain_result(self._error_text(exc))
             return
 
         if action == "download":
+            album_id = extract_jm_id(payload)
+            if not album_id:
+                yield event.plain_result(
+                    "❌ 下载需要 JM 号。\n用法：/jm 下载 <ID>\n例如：/jm 下载 123456"
+                )
+                return
             async for result in self._download_results(event, album_id):
                 yield result
             return
 
+        album_id = extract_jm_id(payload)
+        if album_id:
+            try:
+                yield await self._detail_result_for(event, album_id)
+            except Exception as exc:  # noqa: BLE001 - 统一转成用户可读错误
+                yield event.plain_result(self._error_text(exc))
+            return
+
+        # 不是 JM 号，就按关键词搜索推荐
+        keywords = payload.split()[:8]
+        if not keywords:
+            yield event.plain_result(HELP_TEXT)
+            return
         try:
-            yield await self._detail_result_for(event, album_id)
+            preview = " ".join(keywords)[:80]
+            yield event.plain_result(f"🔎 正在搜索：{preview} …")
+            yield await self._keyword_result(event, keywords)
         except Exception as exc:  # noqa: BLE001 - 统一转成用户可读错误
             yield event.plain_result(self._error_text(exc))
 
@@ -136,6 +169,8 @@ class JMComicPlugin(Star):
             max_desc=self._config_int("description_max_len", 300, 0, 5000),
             show_warning=self._config_bool("nsfw_warning", True),
         )
+        if view.keyword_text:
+            text = f"🔍 关键词：{view.keyword_text}\n\n{text}"
 
         if not view.cover:
             return event.plain_result(text)
@@ -149,6 +184,14 @@ class JMComicPlugin(Star):
 
     async def _recommend_result(self, event: AstrMessageEvent) -> MessageEventResult:
         view = await self.service.recommend()
+        return self._album_result(event, view)
+
+    async def _keyword_result(
+        self,
+        event: AstrMessageEvent,
+        keywords: list[str],
+    ) -> MessageEventResult:
+        view = await self.service.recommend_by_keywords(keywords)
         return self._album_result(event, view)
 
     async def _download_results(
@@ -246,6 +289,17 @@ class JMComicPlugin(Star):
 
         if re.fullmatch(r"(推荐|随机|random|rand|recommend|r)", value, re.IGNORECASE):
             return "recommend", ""
+
+        if re.fullmatch(r"(搜索|search)", value, re.IGNORECASE):
+            return "keyword", ""
+
+        match = re.match(
+            r"^(推荐|随机|搜索|search|random|rand|recommend|r)\s+(.+)$",
+            value,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if match:
+            return "keyword", match.group(2).strip()
 
         match = re.match(
             r"^(下载|download|dl)\s*(.*)$", value, re.IGNORECASE | re.DOTALL
